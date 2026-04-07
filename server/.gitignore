@@ -1,0 +1,17 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Local / runtime (do not commit)
+.env
+.env.*
+_cache/
+_work/
+output/
+uploads/
