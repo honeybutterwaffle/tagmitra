@@ -407,13 +407,9 @@ const FontFamily = ({
                           onChangeFontFamily(font, trackItem);
                         }
                       }}
-                      className="cursor-pointer px-2 py-1 hover:bg-zinc-800/50"
+                      className="cursor-pointer px-2 py-1.5 hover:bg-accent rounded-sm text-sm text-foreground"
                     >
-                      <img
-                        style={{ filter: "invert(100%)" }}
-                        src={font.default.preview}
-                        alt={font.family}
-                      />
+                      {font.family}
                     </div>
                   ))
                 ) : (
@@ -463,7 +459,7 @@ const FontStyle = ({
                 .replace("Italic", " Italic");
               return (
                 <div
-                  className="flex h-6 cursor-pointer items-center px-2 py-3.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+                  className="flex h-6 cursor-pointer items-center px-2 py-3.5 text-sm text-foreground hover:bg-accent hover:text-accent-foreground"
                   key={index}
                   onClick={() => handleChangeFontStyle(style)}
                 >
@@ -587,7 +583,7 @@ const Alignment = ({
                       setLocalValue(option.value);
                       onChange(option.value);
                     }}
-                    className="flex h-8 cursor-pointer items-center px-4 text-sm text-zinc-200 hover:bg-zinc-800/50"
+                    className="flex h-8 cursor-pointer items-center px-4 text-sm text-foreground hover:bg-accent"
                     key={index}
                   >
                     {option.label}
@@ -647,7 +643,7 @@ const FontCase = ({ id }: { id: string }) => {
                 return (
                   <div
                     onClick={() => onChangeFontCase(option.value)}
-                    className="flex h-8 cursor-pointer items-center px-4 text-sm text-zinc-200 hover:bg-zinc-800/50"
+                    className="flex h-8 cursor-pointer items-center px-4 text-sm text-foreground hover:bg-accent"
                     key={index}
                   >
                     {option.label}

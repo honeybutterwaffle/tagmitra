@@ -52,6 +52,26 @@ export const useDownloadState = create<DownloadState>((set, get) => ({
 
         if (!payload) throw new Error("Payload is not defined");
 
+        const trackItemsMap = payload.trackItemsMap || {};
+        const hasRole = (role: string) =>
+          Object.values(trackItemsMap).some((item: any) => {
+            const md = (item as any).metadata || {};
+            const dt = (item as any).details || {};
+            return md.promoRole === role || dt.promoRole === role;
+          });
+
+        if (!hasRole("package") || !hasRole("video") || !hasRole("audio")) {
+          set({ exporting: false, displayProgressModal: false });
+          const missing = [
+            !hasRole("package") ? "package" : null,
+            !hasRole("video") ? "video" : null,
+            !hasRole("audio") ? "audio" : null
+          ]
+            .filter(Boolean)
+            .join(", ");
+          throw new Error(`Missing required items: ${missing || "package, video, audio"}`);
+        }
+
         // Step 1: POST request to start rendering
         const response = await fetch(`/api/render`, {
           method: "POST",

@@ -22,7 +22,7 @@ const PresetItem = ({ preset, onClick }: PresetItemProps) => {
       onClick={onClick}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className="text-md flex h-[70px] cursor-pointer items-center justify-center bg-zinc-800 rounded-lg overflow-hidden"
+      className="text-md flex h-[70px] cursor-pointer items-center justify-center bg-muted rounded-lg overflow-hidden"
     >
       {preset.previewUrlStatic && preset.previewUrlDynamic ? (
         isHovered ? (
@@ -92,7 +92,7 @@ const PresetGrid = ({
   <div className="grid gap-4 p-4">
     <div
       onClick={() => onPresetClick(NONE_PRESET, captionItemIds, captionsData)}
-      className="flex h-[70px] cursor-pointer items-center justify-center bg-zinc-800 rounded-lg"
+      className="flex h-[70px] cursor-pointer items-center justify-center bg-muted rounded-lg"
     >
       <CircleOff />
     </div>

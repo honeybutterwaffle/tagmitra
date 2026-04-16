@@ -13,6 +13,23 @@ import { Moveable } from "@interactify/toolkit";
 import { PlayerRef } from "@remotion/player";
 import { create } from "zustand";
 
+export interface IAlphaInfo {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  startSec: number;
+  pkgW: number;
+  pkgH: number;
+  /** Fitted slate/mute box: max side = contour max side, centered (from /api/analyze/alpha). */
+  slateFit?: {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  };
+}
+
 interface ITimelineStore {
   duration: number;
   fps: number;
@@ -39,6 +56,9 @@ interface ITimelineStore {
   compositions: Partial<IComposition>[];
   setCompositions: (compositions: Partial<IComposition>[]) => void;
 
+  alphaInfo: IAlphaInfo | null;
+  setAlphaInfo: (info: IAlphaInfo | null) => void;
+
   background: {
     type: "color" | "image";
     value: string;
@@ -55,6 +75,9 @@ const useStore = create<ITimelineStore>((set) => ({
     width: 1080,
     height: 1920
   },
+
+  alphaInfo: null,
+  setAlphaInfo: (info: IAlphaInfo | null) => set({ alphaInfo: info }),
 
   background: {
     type: "color",

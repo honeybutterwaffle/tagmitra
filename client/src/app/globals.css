@@ -444,7 +444,7 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 .ScrollAreaScrollbar:hover {
-  background: var(--zinc-800);
+  background: var(--border);
 }
 .ScrollAreaScrollbar[data-orientation="vertical"] {
   width: 10px;
@@ -456,7 +456,7 @@ input[type="number"]::-webkit-outer-spin-button {
 
 .ScrollAreaThumb {
   flex: 1;
-  background: var(--zinc-700);
+  background: var(--muted-foreground);
   border-radius: 10px;
   position: relative;
 }

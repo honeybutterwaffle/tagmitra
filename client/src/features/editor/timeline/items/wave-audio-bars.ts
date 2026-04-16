@@ -1,4 +1,9 @@
 import { Resizable, ResizableProps } from "@designcombo/timeline";
+import {
+  drawTimelineItemLabel,
+  getTimelineLabelName,
+  getTrackItemDisplayDurationMs
+} from "../utils/draw-timeline-label";
 
 interface WaveAudioBarsProps extends ResizableProps {
   src: string;

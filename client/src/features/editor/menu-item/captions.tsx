@@ -273,7 +273,7 @@ const CaptionItem = ({
   };
   return (
     <div
-      className={`flex flex-col gap-2 rounded-lg p-2 hover:cursor-pointer hover:bg-slate-900 ${
+      className={`flex flex-col gap-2 rounded-lg p-2 hover:cursor-pointer hover:bg-accent ${
         isActive
           ? "bg-captions-background text-captions-text"
           : "text-muted-foreground"

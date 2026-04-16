@@ -4,7 +4,7 @@ import { BoxAnim, ContentAnim, MaskAnim } from "@designcombo/animations";
 import { calculateContainerStyles, calculateMediaStyles } from "../styles";
 import { getAnimations } from "../../utils/get-animations";
 import { calculateFrames } from "../../utils/frames";
-import { OffthreadVideo } from "remotion";
+import { Video as RemotionVideo } from "remotion";
 
 export const Video = ({
   item,
@@ -52,9 +52,9 @@ export const Video = ({
           frame={frame || 0}
         >
           <div style={calculateMediaStyles(details, crop)}>
-            <OffthreadVideo
-              startFrom={(item.trim?.from! / 1000) * fps}
-              endAt={(item.trim?.to! / 1000) * fps || 1 / fps}
+            <RemotionVideo
+              startFrom={Math.round((item.trim?.from ?? 0) / 1000 * fps)}
+              endAt={item.trim?.to ? Math.round((item.trim.to / 1000) * fps) : undefined}
               playbackRate={playbackRate}
               src={details.src}
               volume={details.volume || 0 / 100}

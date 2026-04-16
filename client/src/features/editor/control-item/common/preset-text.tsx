@@ -55,7 +55,7 @@ const SelectPreset = ({ trackItem }: { trackItem: ITrackItem & IText }) => {
             <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(100px,1fr))]">
               <div
                 onClick={() => applyPreset(NONE_PRESET, trackItem)}
-                className="flex h-[70px] cursor-pointer items-center justify-center bg-zinc-800 rounded-lg"
+                className="flex h-[70px] cursor-pointer items-center justify-center bg-muted rounded-lg"
               >
                 <CircleOff />
               </div>
@@ -64,7 +64,7 @@ const SelectPreset = ({ trackItem }: { trackItem: ITrackItem & IText }) => {
                 <div
                   key={index}
                   onClick={() => applyPreset(preset, trackItem)}
-                  className="text-md flex h-[70px] cursor-pointer items-center justify-center bg-zinc-800 rounded-lg"
+                  className="text-md flex h-[70px] cursor-pointer items-center justify-center bg-muted rounded-lg"
                 >
                   <div
                     style={{

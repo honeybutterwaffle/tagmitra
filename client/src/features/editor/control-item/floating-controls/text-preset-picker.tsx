@@ -186,7 +186,7 @@ export default function TextPresetPicker({
         <div className="grid grid-cols-3 gap-2 px-4">
           <div
             onClick={() => applyPreset(NONE_PRESET, trackItem)}
-            className="flex h-[70px] cursor-pointer items-center justify-center bg-zinc-800"
+            className="flex h-[70px] cursor-pointer items-center justify-center bg-muted rounded-lg"
           >
             <CircleOff />
           </div>
@@ -195,7 +195,7 @@ export default function TextPresetPicker({
             <div
               key={index}
               onClick={() => applyPreset(preset, trackItem)}
-              className="text-md flex h-[70px] cursor-pointer items-center justify-center bg-zinc-800"
+              className="text-md flex h-[70px] cursor-pointer items-center justify-center bg-muted rounded-lg"
             >
               <div
                 style={{

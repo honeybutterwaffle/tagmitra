@@ -21,9 +21,11 @@ export class AudioDataManager {
     this.fps = fps;
   }
 
+  private noAudioSet = new Set<string>();
+
   private async loadAudioData(src: string, id: string): Promise<void> {
+    if (this.noAudioSet.has(src)) return;
     try {
-      console.log("Loading audio data for", src);
       const data = await getAudioData(src);
       this.audioDatas[id] = {
         data,
@@ -31,15 +33,14 @@ export class AudioDataManager {
       };
       this.cleanupCache();
     } catch (error) {
-      console.error(`Error loading audio data for ${src}:`, error);
-
-      // If it's an EncodingError (no audio track), just ignore it
-      if (error instanceof Error && error.name === "EncodingError") {
-        console.log(`No audio track found for ${src}, ignoring`);
+      if (error instanceof Error && (
+        error.name === "EncodingError" ||
+        error.message?.includes("Unable to decode audio")
+      )) {
+        this.noAudioSet.add(src);
         return;
       }
-
-      // For other errors, still throw them
+      console.error(`Error loading audio data for ${src}:`, error);
       throw error;
     }
   }

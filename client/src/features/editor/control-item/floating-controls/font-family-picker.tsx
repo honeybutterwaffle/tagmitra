@@ -81,13 +81,9 @@ export default function FontFamilyPicker() {
                   onChangeFontFamily(font, trackItem);
                 }
               }}
-              className="cursor-pointer px-2 py-1 hover:bg-zinc-800/50"
+              className="cursor-pointer px-2 py-1.5 hover:bg-accent rounded-sm text-sm text-foreground"
             >
-              <img
-                style={{ filter: "invert(100%)" }}
-                src={font.default.preview}
-                alt={font.family}
-              />
+              {font.family}
             </div>
           ))
         ) : (

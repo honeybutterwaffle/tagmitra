@@ -272,14 +272,11 @@ export function SceneInteractions({
 
         const scaleRegex = /scale\(([^)]+)\)/;
         const match = target.style.transform.match(scaleRegex);
-        if (!match) return;
 
-        //get current scale
-        const [scaleX, scaleY] = match[1]
-          .split(",")
-          .map((value) => Number.parseFloat(value.trim()));
+        const [scaleX, scaleY] = match
+          ? match[1].split(",").map((value) => Number.parseFloat(value.trim()))
+          : [1, 1];
 
-        //get new Scale
         const match2 = transform.match(scaleRegex);
         if (!match2) return;
         const [newScaleX, newScaleY] = match2[1]

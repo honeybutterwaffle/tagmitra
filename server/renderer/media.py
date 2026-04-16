@@ -128,10 +128,19 @@ async def download_assets(design_dict: dict, work_dir: str) -> dict[str, str]:
     items_map = design_dict.get("trackItemsMap", {})
     for item in items_map.values():
         details = item.get("details", {})
-        if details.get("src"):
-            urls.add(str(details["src"]).strip())
-        if details.get("fontUrl"):
-            urls.add(str(details["fontUrl"]).strip())
+        metadata = item.get("metadata", {})
+        for key in (
+            details.get("src"),
+            details.get("fontUrl"),
+            details.get("originalSrc"),
+            metadata.get("originalSrc"),
+            metadata.get("originalUrl"),
+            metadata.get("proxyUrl"),
+            metadata.get("proxySrc"),
+            metadata.get("uploadedUrl"),
+        ):
+            if key:
+                urls.add(str(key).strip())
 
     asset_map: dict[str, str] = {}
     tasks = []

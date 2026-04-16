@@ -1,6 +1,5 @@
 import React from "react";
 import Draggable from "@/components/shared/draggable";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { TRANSITIONS } from "../data/transitions";
 import { useIsDraggingOverTimeline } from "../hooks/is-dragging-over-timeline";
 
@@ -8,9 +7,9 @@ export const Transitions = () => {
   const isDraggingOverTimeline = useIsDraggingOverTimeline();
 
   return (
-    <div className="flex flex-1 flex-col py-4 max-h-full">
-      <ScrollArea className="flex-1 px-4 max-h-full">
-        <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(80px,1fr))] max-h-full">
+    <div className="flex flex-1 flex-col py-4 min-h-0 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4">
+        <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(80px,1fr))]">
           {TRANSITIONS.map((transition, index) => (
             <TransitionsMenuItem
               key={index}
@@ -19,7 +18,7 @@ export const Transitions = () => {
             />
           ))}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 };

@@ -31,7 +31,6 @@ import {
 } from "@/hooks/use-media-query";
 
 import { LogoIcons } from "@/components/shared/logos";
-import Link from "next/link";
 import { ShortcutsModal } from "./shortcuts-modal";
 import { ModeToggle } from "@/components/ui/mode-toggle";
 
@@ -139,12 +138,6 @@ export default function Navbar({
           >
             <Keyboard className="size-5" />
           </Button>
-          <Link href="https://discord.gg/Jmxsd5f2jp" target="_blank">
-            <Button className="h-8 rounded-lg" variant={"outline"}>
-              <LogoIcons.discord className="w-6 h-6" />
-              <span className="hidden md:block">Join Us</span>
-            </Button>
-          </Link>
           <ModeToggle />
 
           {/* <Button
@@ -211,7 +204,7 @@ const DownloadPopover = ({ stateManager }: { stateManager: StateManager }) => {
           </PopoverTrigger>
           <PopoverContent className="bg-background z-[251] w-[--radix-popover-trigger-width] px-2 py-2">
             <div
-              className="flex h-7 items-center rounded-sm px-3 text-sm hover:cursor-pointer hover:bg-zinc-800"
+              className="flex h-7 items-center rounded-sm px-3 text-sm hover:cursor-pointer hover:bg-accent"
               onClick={() => {
                 actions.setExportType("mp4");
                 setIsExportTypeOpen(false);
@@ -220,7 +213,7 @@ const DownloadPopover = ({ stateManager }: { stateManager: StateManager }) => {
               MP4
             </div>
             <div
-              className="flex h-7 items-center rounded-sm px-3 text-sm hover:cursor-pointer hover:bg-zinc-800"
+              className="flex h-7 items-center rounded-sm px-3 text-sm hover:cursor-pointer hover:bg-accent"
               onClick={() => {
                 actions.setExportType("json");
                 setIsExportTypeOpen(false);

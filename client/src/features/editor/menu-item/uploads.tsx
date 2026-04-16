@@ -1,6 +1,5 @@
 import { ADD_AUDIO, ADD_IMAGE, ADD_VIDEO } from "@designcombo/state";
 import { dispatch } from "@designcombo/events";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
 import {
   Music,
@@ -44,7 +43,7 @@ export const Uploads = () => {
         }
       },
       options: {
-        resourceId: "main",
+        targetTrackId: "video",
         scaleMode: "fit"
       }
     });
@@ -66,7 +65,7 @@ export const Uploads = () => {
         },
         metadata: {}
       },
-      options: {}
+      options: { targetTrackId: "overlay" }
     });
   };
 
@@ -81,7 +80,7 @@ export const Uploads = () => {
         },
         metadata: {}
       },
-      options: {}
+      options: { targetTrackId: "audio" }
     });
   };
 
@@ -105,7 +104,7 @@ export const Uploads = () => {
     images.length === 0 &&
     audios.length === 0;
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
       <ModalUpload />
       <UploadPrompt />
 
@@ -152,7 +151,7 @@ export const Uploads = () => {
         </div>
       )}
 
-      <div className="flex flex-col gap-10 p-4">
+      <div className="flex flex-col gap-10 p-4 flex-1 min-h-0 overflow-y-auto">
         {/* Videos Section */}
         {videos.length > 0 && (
           <div>
@@ -160,26 +159,24 @@ export const Uploads = () => {
               <VideoIcon className="w-4 h-4 text-muted-foreground" />
               <span className="font-medium text-sm">Videos</span>
             </div>
-            <ScrollArea className="max-h-32">
-              <div className="grid grid-cols-3 gap-2 max-w-full">
-                {videos.map((video, idx) => (
-                  <div
-                    className="flex items-center gap-2 flex-col w-full"
-                    key={video.id || idx}
+            <div className="grid grid-cols-3 gap-2 max-w-full">
+              {videos.map((video, idx) => (
+                <div
+                  className="flex items-center gap-2 flex-col w-full"
+                  key={video.id || idx}
+                >
+                  <Card
+                    className="w-16 h-16 flex items-center justify-center overflow-hidden relative cursor-pointer"
+                    onClick={() => handleAddVideo(video)}
                   >
-                    <Card
-                      className="w-16 h-16 flex items-center justify-center overflow-hidden relative cursor-pointer"
-                      onClick={() => handleAddVideo(video)}
-                    >
-                      <VideoIcon className="w-8 h-8 text-muted-foreground" />
-                    </Card>
-                    <div className="text-xs text-muted-foreground truncate w-full text-center">
-                      {video.file?.name || video.url || "Video"}
-                    </div>
+                    <VideoIcon className="w-8 h-8 text-muted-foreground" />
+                  </Card>
+                  <div className="text-xs text-muted-foreground truncate w-full text-center">
+                    {video.file?.name || video.url || "Video"}
                   </div>
-                ))}
-              </div>
-            </ScrollArea>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -190,26 +187,24 @@ export const Uploads = () => {
               <ImageIcon className="w-4 h-4 text-muted-foreground" />
               <span className="font-medium text-sm">Images</span>
             </div>
-            <ScrollArea className="max-h-32">
-              <div className="grid grid-cols-3 gap-2 max-w-full">
-                {images.map((image, idx) => (
-                  <div
-                    className="flex items-center gap-2 flex-col w-full"
-                    key={image.id || idx}
+            <div className="grid grid-cols-3 gap-2 max-w-full">
+              {images.map((image, idx) => (
+                <div
+                  className="flex items-center gap-2 flex-col w-full"
+                  key={image.id || idx}
+                >
+                  <Card
+                    className="w-16 h-16 flex items-center justify-center overflow-hidden relative cursor-pointer"
+                    onClick={() => handleAddImage(image)}
                   >
-                    <Card
-                      className="w-16 h-16 flex items-center justify-center overflow-hidden relative cursor-pointer"
-                      onClick={() => handleAddImage(image)}
-                    >
-                      <ImageIcon className="w-8 h-8 text-muted-foreground" />
-                    </Card>
-                    <div className="text-xs text-muted-foreground truncate w-full text-center">
-                      {image.file?.name || image.url || "Image"}
-                    </div>
+                    <ImageIcon className="w-8 h-8 text-muted-foreground" />
+                  </Card>
+                  <div className="text-xs text-muted-foreground truncate w-full text-center">
+                    {image.file?.name || image.url || "Image"}
                   </div>
-                ))}
-              </div>
-            </ScrollArea>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -220,26 +215,24 @@ export const Uploads = () => {
               <Music className="w-4 h-4 text-muted-foreground" />
               <span className="font-medium text-sm">Audios</span>
             </div>
-            <ScrollArea className="max-h-32">
-              <div className="grid grid-cols-3 gap-2 max-w-full">
-                {audios.map((audio, idx) => (
-                  <div
-                    className="flex items-center gap-2 flex-col w-full"
-                    key={audio.id || idx}
+            <div className="grid grid-cols-3 gap-2 max-w-full">
+              {audios.map((audio, idx) => (
+                <div
+                  className="flex items-center gap-2 flex-col w-full"
+                  key={audio.id || idx}
+                >
+                  <Card
+                    className="w-16 h-16 flex items-center justify-center overflow-hidden relative cursor-pointer"
+                    onClick={() => handleAddAudio(audio)}
                   >
-                    <Card
-                      className="w-16 h-16 flex items-center justify-center overflow-hidden relative cursor-pointer"
-                      onClick={() => handleAddAudio(audio)}
-                    >
-                      <Music className="w-8 h-8 text-muted-foreground" />
-                    </Card>
-                    <div className="text-xs text-muted-foreground truncate w-full text-center">
-                      {audio.file?.name || audio.url || "Audio"}
-                    </div>
+                    <Music className="w-8 h-8 text-muted-foreground" />
+                  </Card>
+                  <div className="text-xs text-muted-foreground truncate w-full text-center">
+                    {audio.file?.name || audio.url || "Audio"}
                   </div>
-                ))}
-              </div>
-            </ScrollArea>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

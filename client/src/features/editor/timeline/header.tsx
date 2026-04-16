@@ -244,7 +244,7 @@ const Header = () => {
               }}
             >
               <div
-                className="font-medium text-zinc-200"
+                className="font-medium text-foreground"
                 style={{
                   display: "flex",
                   justifyContent: "center"

@@ -15,7 +15,7 @@ const Scene = forwardRef<
   }
 >(({ stateManager }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { size, trackItemIds } = useStore();
+  const { size, trackItemIds, alphaInfo } = useStore();
   const { zoom, handlePinch, recalculateZoom } = useZoom(
     containerRef as React.RefObject<HTMLDivElement>,
     size
@@ -65,6 +65,19 @@ const Scene = forwardRef<
         />
         <Board size={size}>
           <Player />
+          {alphaInfo && alphaInfo.w > 0 && alphaInfo.h > 0 && (
+            <div
+              id="alpha-region-guide"
+              style={{
+                position: "absolute",
+                left: alphaInfo.x,
+                top: alphaInfo.y,
+                width: alphaInfo.w,
+                height: alphaInfo.h,
+                pointerEvents: "none"
+              }}
+            />
+          )}
           <SceneInteractions
             stateManager={stateManager}
             containerRef={containerRef as React.RefObject<HTMLDivElement>}

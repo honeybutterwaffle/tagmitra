@@ -30,6 +30,7 @@ import useLayoutStore from "./store/use-layout-store";
 import ControlItemHorizontal from "./control-item-horizontal";
 import { design } from "./mock";
 import { Separator } from "@/components/ui/separator";
+import { setEditorStateManager } from "./utils/editor-state-manager";
 
 const stateManager = new StateManager({
   size: {
@@ -37,6 +38,8 @@ const stateManager = new StateManager({
     height: 1920,
   },
 });
+
+setEditorStateManager(stateManager);
 
 const SceneContainer = ({
   sceneRef,
@@ -69,11 +72,13 @@ const SceneContainer = ({
 
 const Sidebar = () => {
   return (
-    <div className="bg-card w-full flex flex-none border-r border-border/80 h-[calc(100vh-52px)]">
-      <div className="flex flex-col w-full">
+    <div className="bg-card w-full flex flex-none border-r border-border/80 h-[calc(100vh-52px)] overflow-hidden">
+      <div className="flex flex-col w-full h-full overflow-hidden">
         <MenuList />
-        <Separator orientation="horizontal" />
-        <ControlItem />
+        <Separator orientation="horizontal" className="shrink-0" />
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <ControlItem />
+        </div>
       </div>
     </div>
   );
@@ -99,9 +104,9 @@ const Editor = ({ tempId, id }: { tempId?: string; id?: string }) => {
   useTimelineEvents();
 
   const { setCompactFonts, setFonts } = useDataState();
-  // useEffect(() => {
-  //   dispatch(DESIGN_LOAD, { payload: design });
-  // }, []);
+  useEffect(() => {
+    dispatch(DESIGN_LOAD, { payload: design });
+  }, []);
   useEffect(() => {
     setCompactFonts(getCompactFontData(FONTS));
     setFonts(FONTS);

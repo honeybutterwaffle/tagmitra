@@ -49,7 +49,7 @@ const SceneEmpty = () => {
           <DroppableArea
             onDragStateChange={setIsDraggingOver}
             className={`absolute h-[calc(100%-40px)] bg-card aspect-[9/16] left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 transform items-center justify-center border border-dashed text-center transition-colors duration-200 ease-in-out ${
-              isDraggingOver ? "border-border bg-white/10" : "border-border"
+              isDraggingOver ? "border-border bg-primary/10" : "border-border"
             }`}
           >
             <div className="flex flex-col items-center justify-center gap-4 pb-12">

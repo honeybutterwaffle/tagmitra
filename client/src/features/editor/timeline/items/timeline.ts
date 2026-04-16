@@ -3,7 +3,7 @@ import Video from "./video";
 import { throttle } from "lodash";
 import Audio from "./audio";
 import { TimelineOptions } from "@designcombo/timeline";
-import { ITimelineScaleState } from "@designcombo/types";
+import { ITrack, ITimelineScaleState } from "@designcombo/types";
 
 class Timeline extends TimelineBase {
   public isShiftKey: boolean = false;
@@ -40,6 +40,101 @@ class Timeline extends TimelineBase {
     // Cleanup event listener for Shift key
     window.removeEventListener("keydown", this.handleKeyDown);
     window.removeEventListener("keyup", this.handleKeyUp);
+  }
+
+  /**
+   * Keep all timeline rows in `this.tracks` (promo template: 7 fixed lanes).
+   * Parent `filterEmptyTracks` drops empty non-static tracks or keeps static empty lanes visible;
+   * we only dedupe by id so state always retains every lane.
+   */
+  filterEmptyTracks(): void {
+    const seen = new Set<string>();
+    this.tracks = this.tracks.filter(
+      (t) => !seen.has(t.id) && (seen.add(t.id), true)
+    );
+  }
+
+  private _applyTrackFilter = false;
+
+  private getVisibleTracksForCanvas(): ITrack[] {
+    const active = this.activeIds ?? [];
+    return this.tracks.filter((track) => {
+      if (track.items.length > 0) return true;
+      return active.some((id) => track.items.includes(id));
+    });
+  }
+
+  renderTracks(): void {
+    if (!this._applyTrackFilter) {
+      super.renderTracks();
+      return;
+    }
+    const full = this.tracks;
+    this.tracks = this.getVisibleTracksForCanvas();
+    try {
+      super.renderTracks();
+    } finally {
+      this.tracks = full;
+    }
+  }
+
+  /**
+   * Push original filenames onto canvas objects so labels show real names
+   * instead of proxy filenames. Uses the upload store entries (matched by URL)
+   * as the source of truth, falling back to details.name from the store.
+   */
+  private syncItemNames(uploads: any[]): void {
+    const urlToName = new Map<string, string>();
+    for (const u of uploads) {
+      const name = u.fileName || u.file?.name || "";
+      if (!name) continue;
+      const proxyUrl = u.metadata?.proxyUrl || u.metadata?.uploadedUrl || u.url;
+      const origUrl = u.metadata?.originalUrl;
+      if (proxyUrl) urlToName.set(proxyUrl, name);
+      if (origUrl) urlToName.set(origUrl, name);
+    }
+
+    const objects = this.getObjects();
+    for (const obj of objects) {
+      const o = obj as any;
+      if (typeof o.name !== "string" || !o.id) continue;
+      const storeItem = this.trackItemsMap[o.id];
+      if (!storeItem) continue;
+
+      const src = storeItem.details?.src || "";
+      const origSrc = storeItem.details?.originalSrc || storeItem.metadata?.originalSrc || "";
+      const proxySrc = storeItem.metadata?.proxySrc || "";
+
+      const originalName =
+        urlToName.get(src) ||
+        urlToName.get(origSrc) ||
+        urlToName.get(proxySrc) ||
+        storeItem.details?.name ||
+        (storeItem.name && storeItem.name !== storeItem.type
+          ? storeItem.name
+          : null);
+
+      if (originalName && o.name !== originalName) {
+        o.name = originalName;
+      }
+    }
+  }
+
+  /** Call after store-driven `activeIds` / `tracks` / `trackItemsMap` changes (parent updateState does not rebuild rows). */
+  public syncPromoTrackVisibility(activeIdsFromStore: string[], uploads?: any[]): void {
+    this.activeIds = activeIdsFromStore;
+    this.syncItemNames(uploads || []);
+    this._applyTrackFilter = true;
+    try {
+      this.renderTracks();
+    } finally {
+      this._applyTrackFilter = false;
+    }
+    this.alignItemsToTrack();
+    this.refreshTrackLayout();
+    this.setTrackItemCoords();
+    this.calcBounding();
+    this.requestRenderAll();
   }
 
   public setViewportPos(posX: number, posY: number) {

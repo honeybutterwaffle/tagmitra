@@ -45,6 +45,7 @@ export const useStateManagerEvents = (stateManager: StateManager) => {
       filterTrakcItems as (ITrackItem & (IVideo | IAudio))[]
     );
     setState({
+      duration: currentState.duration,
       trackItemsMap: currentState.trackItemsMap,
       trackItemIds: currentState.trackItemIds,
       tracks: currentState.tracks
@@ -54,6 +55,7 @@ export const useStateManagerEvents = (stateManager: StateManager) => {
   const handleUpdateItemDetails = useCallback(() => {
     const currentState = stateManager.getState();
     setState({
+      duration: currentState.duration,
       trackItemsMap: currentState.trackItemsMap
     });
   }, [stateManager, setState]);

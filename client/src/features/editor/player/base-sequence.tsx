@@ -27,13 +27,14 @@ export const BaseSequence = ({
 }) => {
   const { details } = item as ITrackItem;
   const { fps, isTransition } = options;
-  const { from, durationInFrames } = calculateFrames(
+  const { from, durationInFrames: rawDuration } = calculateFrames(
     {
       from: item.display.from,
       to: item.display.to
     },
     fps
   );
+  const durationInFrames = rawDuration;
   const crop = details.crop || {
     x: 0,
     y: 0,

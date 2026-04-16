@@ -70,6 +70,47 @@ def _probe_media_duration_sec(path: str) -> float:
         return 0.0
 
 
+def _probe_resolution(path: str) -> tuple[int, int]:
+    try:
+        proc = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height",
+                "-of",
+                "csv=s=x:p=0",
+                path,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        out = (proc.stdout or "").strip()
+        if "x" in out:
+            w, h = out.split("x")
+            return int(float(w)), int(float(h))
+    except Exception:
+        pass
+    return 0, 0
+
+
+def _detect_black_box(path: str, sample_frames: int = 90, threshold: int = 12):
+    """
+    Detect black alpha hole (contour bbox) and when it first appears.
+    Delegates to package_alpha temporal analysis; returns legacy {x,y,w,h,start_sec}.
+    """
+    from .package_alpha import analyze_package_alpha
+
+    _ = sample_frames
+    _ = threshold
+    result = analyze_package_alpha(path)
+    return result.get("alpha_box")
+
+
 def _input_has_audio(path: str) -> bool:
     try:
         proc = subprocess.run(
@@ -102,7 +143,9 @@ def _resolve_source_trim(
 ) -> tuple[float, float]:
     """
     Map timeline clip [d_from_sec, d_to_sec] to source trim [t_from, t_to] in seconds.
-    Fills in missing/invalid trim using timeline length × playbackRate (matches Remotion).
+    Fills in missing/invalid trim using timeline length x playbackRate (matches Remotion).
+    When probe fails (src_dur=0), trusts the timeline duration instead of producing
+    a tiny 0.04s clip.
     """
     trim = item.get("trim") or {}
     t_from = float(trim.get("from", 0) or 0) / 1000.0
@@ -118,9 +161,14 @@ def _resolve_source_trim(
     if src_dur > 0:
         t_to = min(t_to, src_dur)
         t_from = min(t_from, max(0.0, src_dur - 0.001))
+        if t_to <= t_from:
+            t_to = t_from + max(timeline_sec * pr, 0.1)
+            t_to = min(t_to, src_dur)
+    else:
+        print(f"[WARN] Could not probe duration for {local_path}, using timeline duration {timeline_sec}s")
 
     if t_to <= t_from:
-        t_to = min(src_dur, t_from + 0.04) if src_dur > 0 else t_from + 0.04
+        t_to = t_from + max(timeline_sec * pr, 0.1)
 
     return t_from, t_to
 
@@ -141,7 +189,7 @@ def _calculate_overlay_pos(left, top, width, height, scale):
     sh = height * scale
     ox = cx - sw / 2
     oy = cy - sh / 2
-    return int(ox), int(oy), int(sw), int(sh)
+    return int(round(ox)), int(round(oy)), max(2, int(round(sw))), max(2, int(round(sh)))
 
 
 def _calculate_duration(design: dict) -> float:
@@ -153,6 +201,56 @@ def _calculate_duration(design: dict) -> float:
         if end > max_time:
             max_time = end
     return max_time / 1000.0
+
+
+def _get_promo_role(item: dict) -> Optional[str]:
+    metadata = item.get("metadata", {})
+    details = item.get("details", {})
+    return (
+        metadata.get("promoRole")
+        or details.get("promoRole")
+        or item.get("promoRole")
+    )
+
+
+def _get_local_path(item: dict, asset_map: dict[str, str], prefer_original: bool = False) -> Optional[str]:
+    metadata = item.get("metadata", {})
+    details = item.get("details", {})
+    item_id = item.get("id", "?")
+
+    original_candidates = [
+        ("metadata.originalSrc", metadata.get("originalSrc")),
+        ("metadata.originalUrl", metadata.get("originalUrl")),
+        ("details.originalSrc", details.get("originalSrc")),
+    ]
+    proxy_candidates = [
+        ("metadata.proxySrc", metadata.get("proxySrc")),
+        ("metadata.proxyUrl", metadata.get("proxyUrl")),
+        ("details.src", details.get("src")),
+        ("metadata.uploadedUrl", metadata.get("uploadedUrl")),
+    ]
+
+    candidates = (original_candidates + proxy_candidates) if prefer_original else proxy_candidates
+
+    for label, key in candidates:
+        if not key:
+            continue
+        if key in asset_map:
+            is_original = label.startswith("metadata.original") or label.startswith("details.original")
+            kind = "ORIGINAL" if is_original else "PROXY"
+            print(f"[ENGINE] Item {item_id}: using {kind} via {label}")
+            return asset_map[key]
+
+    print(f"[WARN] Item {item_id}: no local path found in asset_map (prefer_original={prefer_original})")
+    return None
+
+
+def _clamp_alpha_start(start_sec: float, alpha_start: Optional[float], role: Optional[str]) -> float:
+    if alpha_start is None or role is None:
+        return start_sec
+    if role in {"mute", "overlay", "text", "sponsorAudio", "audio", "programSlate"}:
+        return max(start_sec, alpha_start)
+    return start_sec
 
 
 def _group_items_with_transitions(design: dict) -> list[list[dict]]:
@@ -223,10 +321,40 @@ async def render_design(
     overlays_dir = os.path.join(work_dir, "overlays")
     os.makedirs(overlays_dir, exist_ok=True)
 
+    import json
+    with open(os.path.join(work_dir, "design.json"), "w") as _djf:
+        json.dump(design_dict, _djf, indent=2, default=str)
+
     # ── Step 1: Download assets ───────────────────────────────────
     if progress_callback:
         await progress_callback(5, "Downloading assets...")
     asset_map = await download_assets(design_dict, work_dir)
+
+    # ── Step 1b: detect package + alpha box, prefer original sources ─────────
+    track_items_map = design_dict.get("trackItemsMap", {})
+    package_path = None
+    package_item = next(
+        (itm for itm in track_items_map.values() if _get_promo_role(itm) == "package"),
+        None,
+    )
+    alpha_info = None
+    if package_item:
+        package_path = _get_local_path(package_item, asset_map, prefer_original=True)
+        if package_path:
+            pw, ph = _probe_resolution(package_path)
+            if pw and ph:
+                canvas_w, canvas_h = pw, ph
+            alpha_info = _detect_black_box(package_path)
+
+    alpha_hole_rect = None
+    if alpha_info and all(k in alpha_info for k in ("x", "y", "w", "h")):
+        alpha_hole_rect = (
+            int(alpha_info["x"]),
+            int(alpha_info["y"]),
+            int(alpha_info["w"]),
+            int(alpha_info["h"]),
+        )
+    print(f"[ENGINE] Alpha detection: alpha_info={alpha_info}, alpha_hole_rect={alpha_hole_rect}")
 
     # ── Step 2: Prepare inputs and filters ────────────────────────
     if progress_callback:
@@ -238,25 +366,91 @@ async def render_design(
     overlay_idx = 0      # counter for overlay labels
     input_idx = 0        # counter for input index
 
-    # Input 0: base canvas (solid color background)
-    bg_color = "black"
-    bg_data = design_dict.get("background", {})
-    if isinstance(bg_data, dict) and bg_data.get("type") == "color":
-        bg_color = bg_data.get("value", "black")
-    elif isinstance(bg_data, str):
-        bg_color = bg_data if bg_data != "transparent" else "black"
+    # Input 0: base canvas (package loop or solid color background)
+    if package_path:
+        inputs.append(["-stream_loop", "-1", "-i", package_path])
+        base_label = "pkg0"
+        filter_parts.append(f"[0:v]scale={canvas_w}:{canvas_h},format=rgba[{base_label}]")
+        current_video_label = base_label
+        input_idx = 1
+        if _input_has_audio(package_path):
+            a_label = "pkg_a0"
+            filter_parts.append(
+                f"[0:a]atrim=0:{duration},asetpts=PTS-STARTPTS[{a_label}]"
+            )
+            audio_labels.append(a_label)
+    else:
+        bg_color = "black"
+        bg_data = design_dict.get("background", {})
+        if isinstance(bg_data, dict) and bg_data.get("type") == "color":
+            bg_color = bg_data.get("value", "black")
+        elif isinstance(bg_data, str):
+            bg_color = bg_data if bg_data != "transparent" else "black"
 
-    inputs.append([
-        "-f", "lavfi", "-i",
-        f"color=c={_escape_ffmpeg_color(bg_color)}:s={canvas_w}x{canvas_h}:r={fps}:d={duration}"
-    ])
-    current_video_label = "0:v"
-    input_idx = 1
+        inputs.append([
+            "-f", "lavfi", "-i",
+            f"color=c={_escape_ffmpeg_color(bg_color)}:s={canvas_w}x{canvas_h}:r={fps}:d={duration}"
+        ])
+        current_video_label = "0:v"
+        input_idx = 1
 
     # Sort items by track order (trackItemIds defines z-order)
-    items_map = design_dict.get("trackItemsMap", {})
+    items_map = track_items_map
     item_ids = design_dict.get("trackItemIds", [])
+    role_priority = {
+        "package": 0,
+        "backgroundMusic": 1,
+        "programSlate": 2,
+        "sponsorAudio": 3,
+        "audio": 3,
+        "mute": 4,
+        "overlay": 5,
+        "text": 6,
+    }
+    if item_ids:
+        item_ids = sorted(
+            item_ids,
+            key=lambda i: role_priority.get(_get_promo_role(items_map.get(i, {})) or items_map.get(i, {}).get("type"), 50),
+        )
+        design_dict["trackItemIds"] = item_ids
     trans_map = design_dict.get("transitionsMap", {})
+
+    # Pair mutes with sponsor audios (by order on timeline) to stretch video to audio duration
+    sponsor_audios = [itm for itm in track_items_map.values() if _get_promo_role(itm) in {"sponsorAudio", "audio"}]
+    mutes = [itm for itm in track_items_map.values() if _get_promo_role(itm) == "mute"]
+
+    def _stem(name: str) -> set[str]:
+        import re
+        tokens = re.sub(r"[^a-z0-9]+", " ", name.lower()).split()
+        return set(t for t in tokens if len(t) > 1)
+
+    def _name(item: dict) -> str:
+        details = item.get("details", {})
+        return details.get("name") or details.get("fileName") or details.get("src") or item.get("id") or ""
+
+    mute_targets: dict[str, float] = {}
+    used_audios = set()
+    for mute in mutes:
+        m_name = _name(mute)
+        m_tokens = _stem(m_name)
+        best = None
+        best_score = -1
+        for aud in sponsor_audios:
+            if aud.get("id") in used_audios:
+                continue
+            a_name = _name(aud)
+            a_tokens = _stem(a_name)
+            score = len(m_tokens & a_tokens)
+            if score > best_score:
+                best_score = score
+                best = aud
+        if best:
+            used_audios.add(best.get("id"))
+            aud_path = _get_local_path(best, asset_map, prefer_original=True)
+            if aud_path:
+                dur = _probe_media_duration_sec(aud_path)
+                if dur > 0:
+                    mute_targets[mute.get("id")] = dur
 
     # Process groups (items connected by transitions)
     groups = _group_items_with_transitions(design_dict)
@@ -271,9 +465,13 @@ async def render_design(
 
         first_item = items_in_group[0]
         item_type = first_item.get("type", "")
+        item_role = _get_promo_role(first_item)
 
         # Skip unsupported types
         if item_type in SKIPPED_ITEM_TYPES:
+            continue
+        if item_role == "package":
+            # already used as base layer
             continue
 
         # ── VIDEO items ───────────────────────────────────────────
@@ -282,7 +480,11 @@ async def render_design(
                 # Single video, no transitions
                 result = _process_single_video(
                     first_item, asset_map, inputs, filter_parts,
-                    input_idx, current_video_label, canvas_w, canvas_h, fps
+                    input_idx, current_video_label, canvas_w, canvas_h, fps,
+                    stretch_targets=mute_targets,
+                    alpha_start=alpha_info["start_sec"] if alpha_info else None,
+                    alpha_hole_rect=alpha_hole_rect,
+                    total_video_duration=duration,
                 )
                 if result:
                     input_idx = result["next_input_idx"]
@@ -294,7 +496,8 @@ async def render_design(
                 result = _process_video_group_with_transitions(
                     items_in_group, transitions_in_group, asset_map,
                     inputs, filter_parts, input_idx,
-                    current_video_label, canvas_w, canvas_h, fps
+                    current_video_label, canvas_w, canvas_h, fps,
+                    alpha_start=alpha_info["start_sec"] if alpha_info else None,
                 )
                 if result:
                     input_idx = result["next_input_idx"]
@@ -305,7 +508,9 @@ async def render_design(
         # ── AUDIO items ───────────────────────────────────────────
         elif item_type == "audio":
             result = _process_audio(
-                first_item, asset_map, inputs, filter_parts, input_idx, fps
+                first_item, asset_map, inputs, filter_parts, input_idx, fps,
+                alpha_start=alpha_info["start_sec"] if alpha_info else None,
+                total_duration=duration,
             )
             if result:
                 input_idx = result["next_input_idx"]
@@ -316,7 +521,8 @@ async def render_design(
         elif item_type == "image":
             result = _process_image(
                 first_item, asset_map, inputs, filter_parts,
-                input_idx, current_video_label, canvas_w, canvas_h, fps
+                input_idx, current_video_label, canvas_w, canvas_h, fps,
+                alpha_start=alpha_info["start_sec"] if alpha_info else None,
             )
             if result:
                 input_idx = result["next_input_idx"]
@@ -326,7 +532,8 @@ async def render_design(
         elif item_type == "text":
             result = _process_text(
                 first_item, asset_map, overlays_dir, inputs, filter_parts,
-                input_idx, current_video_label, canvas_w, canvas_h, fps
+                input_idx, current_video_label, canvas_w, canvas_h, fps,
+                alpha_start=alpha_info["start_sec"] if alpha_info else None,
             )
             if result:
                 input_idx = result["next_input_idx"]
@@ -380,9 +587,11 @@ async def render_design(
         else:
             mix_inputs = "".join(f"[{l}]" for l in audio_labels)
             audio_out_label = "amixed"
+            weights = " ".join("1" for _ in audio_labels)
             filter_parts.append(
                 f"{mix_inputs}amix=inputs={len(audio_labels)}:"
-                f"duration=longest:dropout_transition=0[{audio_out_label}]"
+                f"duration=longest:dropout_transition=0:"
+                f"normalize=0:weights={weights}[{audio_out_label}]"
             )
 
     # ── Step 4: Build and run FFmpeg command ───────────────────────
@@ -420,8 +629,19 @@ async def render_design(
     cmd_parts.extend(["-t", str(duration)])
     cmd_parts.append(output_path)
 
-    print(f"[ENGINE] Running FFmpeg command:")
-    print(f"  {' '.join(cmd_parts[:20])}...")
+    print(f"[ENGINE] Canvas: {canvas_w}x{canvas_h}, duration: {duration}s, fps: {fps}")
+    print(f"[ENGINE] Total inputs: {len(inputs)}, audio streams: {len(audio_labels)}")
+    if filter_parts:
+        print(f"[ENGINE] filter_complex ({len(filter_parts)} parts):")
+        for i, fp in enumerate(filter_parts):
+            print(f"  [{i}] {fp}")
+    cmd_safe = []
+    for p in cmd_parts:
+        if "\n" in p:
+            cmd_safe.append(repr(p)[:200])
+        else:
+            cmd_safe.append(p)
+    print(f"[ENGINE] FFmpeg command:\n  {' '.join(cmd_safe)}")
 
     proc = await asyncio.create_subprocess_exec(
         *cmd_parts,
@@ -432,9 +652,11 @@ async def render_design(
     _, stderr = await proc.communicate()
 
     if proc.returncode != 0:
-        err_text = stderr.decode()[-2000:]
-        print(f"[ENGINE] FFmpeg error:\n{err_text}")
+        err_text = stderr.decode()[-4000:]
+        print(f"[ENGINE] FFmpeg FAILED (code {proc.returncode}):\n{err_text}")
         raise RuntimeError(f"FFmpeg failed (code {proc.returncode}): {err_text}")
+    else:
+        print(f"[ENGINE] FFmpeg completed successfully: {output_path}")
 
     if progress_callback:
         await progress_callback(100, "Complete")
@@ -449,30 +671,66 @@ async def render_design(
 
 def _process_single_video(
     item, asset_map, inputs, filters, input_idx,
-    current_label, canvas_w, canvas_h, fps
+    current_label, canvas_w, canvas_h, fps,
+    stretch_targets=None,
+    alpha_start=None,
+    alpha_hole_rect=None,
+    total_video_duration=None,
 ):
     details = item.get("details", {})
-    src = details.get("src", "")
-    local_path = asset_map.get(src)
+    role = _get_promo_role(item)
+    local_path = _get_local_path(item, asset_map, prefer_original=True)
     if not local_path:
         return None
 
     display = item.get("display", {})
     d_from = display.get("from", 0) / 1000.0
     d_to = display.get("to", 0) / 1000.0
+    d_from = _clamp_alpha_start(d_from, alpha_start, role)
 
     t_from, t_to = _resolve_source_trim(item, local_path, d_from, d_to)
+    target_dur = None
+    if stretch_targets and item.get("id") in stretch_targets:
+        target_dur = stretch_targets.get(item.get("id"))
 
     playback_rate = item.get("playbackRate", 1) or 1
-    volume = (details.get("volume", 100) or 0) / 100.0
+    if role == "mute" and target_dur and target_dur > 0:
+        actual = t_to - t_from
+        if actual > 0:
+            playback_rate = actual / target_dur
+    volume = (details.get("volume", 100) or 100) / 100.0
     scale = _parse_scale_from_transform(details.get("transform", "none"))
 
     left = parse_css_px(details.get("left", 0))
     top = parse_css_px(details.get("top", 0))
     w = parse_css_length(details.get("width"), float(canvas_w), float(canvas_w))
     h = parse_css_length(details.get("height"), float(canvas_h), float(canvas_h))
+    crop = details.get("crop")
+
+    # For hole-bound videos (mute/programSlate/video): force-fit into the alpha hole rect.
+    # The client may fail to set proper dimensions (timing race in applyHoleLayoutAfterPromoAdd),
+    # so the server always uses the detected alpha hole as the authoritative source.
+    _HOLE_ROLES = ("programSlate", "mute", "video")
+    if alpha_hole_rect and role in _HOLE_ROLES:
+        ax, ay, aw, ah = (int(alpha_hole_rect[0]), int(alpha_hole_rect[1]),
+                          int(alpha_hole_rect[2]), int(alpha_hole_rect[3]))
+        left = float(ax)
+        top = float(ay)
+        w = float(aw)
+        h = float(ah)
+        scale = 1.0
+        crop = None
+        print(f"[ENGINE] Video {item.get('id','?')}: role={role}, "
+              f"OVERRIDING to alpha hole: left={left} top={top} w={w} h={h}")
 
     ox, oy, sw, sh = _calculate_overlay_pos(left, top, w, h, scale)
+
+    print(f"[ENGINE] Video {item.get('id','?')}: role={role}, "
+          f"raw left={details.get('left')}, top={details.get('top')}, "
+          f"width={details.get('width')}, height={details.get('height')}, "
+          f"parsed l={left} t={top} w={w} h={h}, "
+          f"overlay ox={ox} oy={oy} sw={sw} sh={sh}, scale={scale}, "
+          f"crop={crop}, alpha_hole={alpha_hole_rect}")
 
     opacity = (details.get("opacity", 100) or 100) / 100.0
     brightness = (details.get("brightness", 100) or 100) / 100.0
@@ -481,81 +739,106 @@ def _process_single_video(
     flip_y = details.get("flipY", False)
     rotate_deg = parse_css_px(details.get("rotate", "0deg").replace("deg", ""))
 
-    crop = details.get("crop")
-
-    # Build input
-    inputs.append(["-i", local_path])
+    # Build input with seeking for reliable codec compatibility
+    trim_dur = t_to - t_from
+    input_args = []
+    if t_from > 0.01:
+        input_args.extend(["-ss", str(t_from)])
+    input_args.extend(["-t", str(trim_dur), "-i", local_path])
+    inputs.append(input_args)
     v_label = f"v{input_idx}"
 
-    # Build video filter chain
+    # Build video filter chain (no trim filter needed -- seeking done at input level)
     v_filters = []
+    v_filters.append("setpts=PTS-STARTPTS")
 
-    # Trim
-    v_filters.append(f"trim={t_from}:{t_to},setpts=PTS-STARTPTS")
-
-    # Playback rate
     if playback_rate != 1:
         v_filters.append(f"setpts=PTS/{playback_rate}")
 
-    # Crop
     if crop and crop.get("width") and crop.get("height"):
         v_filters.append(
             f"crop={int(crop['width'])}:{int(crop['height'])}:"
             f"{int(crop.get('x', 0))}:{int(crop.get('y', 0))}"
         )
 
-    # Scale
     v_filters.append(f"scale={sw}:{sh}")
 
-    # Flip
     if flip_x:
         v_filters.append("hflip")
     if flip_y:
         v_filters.append("vflip")
 
-    # Rotate
     if rotate_deg and rotate_deg != 0:
         v_filters.append(
             f"rotate={rotate_deg}*PI/180:fillcolor=none:ow=rotw({rotate_deg}*PI/180):oh=roth({rotate_deg}*PI/180)"
         )
 
-    # Brightness
     if brightness != 1.0:
         v_filters.append(f"eq=brightness={brightness - 1.0}")
 
-    # Blur
     if blur_val > 0:
         v_filters.append(f"boxblur={int(blur_val)}:{int(blur_val)}")
 
-    # Opacity (using format + colorchannelmixer)
     if opacity < 1.0:
         v_filters.append(f"format=rgba,colorchannelmixer=aa={opacity}")
 
-    # Pad to ensure proper alpha overlay
-    v_filters.append("format=rgba")
-
-    filter_chain = ",".join(v_filters)
-    filters.append(f"[{input_idx}:v]{filter_chain}[{v_label}]")
-
-    # Overlay onto current
     next_label = f"ov{input_idx}"
-    enable = f"enable='between(t,{d_from},{d_to})'"
-    filters.append(
-        f"[{current_label}][{v_label}]overlay={ox}:{oy}:{enable}:format=auto[{next_label}]"
+
+    use_hole = (
+        alpha_hole_rect
+        and role in _HOLE_ROLES
+        and total_video_duration
+        and float(total_video_duration) > 0
     )
 
-    # Audio (skip when stream missing — otherwise FFmpeg fails on [N:a])
+    if use_hole:
+        ax, ay, aw, ah = (int(alpha_hole_rect[0]), int(alpha_hole_rect[1]),
+                          int(alpha_hole_rect[2]), int(alpha_hole_rect[3]))
+        pad_x = max(0, ox)
+        pad_y = max(0, oy)
+        v_filters.append(f"pad={canvas_w}:{canvas_h}:{pad_x}:{pad_y}:black@0")
+        v_filters.append("format=rgba")
+        filter_chain = ",".join(v_filters)
+        vp_lbl = f"vpad{input_idx}"
+        mk_lbl = f"mskh{input_idx}"
+        filters.append(f"[{input_idx}:v]{filter_chain}[{vp_lbl}]")
+        td = float(total_video_duration)
+        filters.append(
+            f"color=c=black@0:s={canvas_w}x{canvas_h}:r={fps}:d={td},"
+            f"format=rgba,drawbox=x={ax}:y={ay}:w={aw}:h={ah}:color=white@1:t=fill[{mk_lbl}]"
+        )
+        # alphamerge first, THEN tpad — tpad before alphamerge would turn
+        # transparent padding into opaque black (mask forces alpha=255 in hole)
+        merged_lbl = f"mrg{input_idx}"
+        filters.append(f"[{vp_lbl}][{mk_lbl}]alphamerge[{merged_lbl}]")
+        overlay_src = merged_lbl
+        if d_from > 0.001:
+            tp_lbl = f"tp{input_idx}"
+            filters.append(f"[{merged_lbl}]tpad=start_duration={d_from}:color=black@0[{tp_lbl}]")
+            overlay_src = tp_lbl
+        filters.append(
+            f"[{current_label}][{overlay_src}]overlay=0:0:eof_action=pass:format=auto[{next_label}]"
+        )
+    else:
+        v_filters.append("format=rgba")
+        if d_from > 0.001:
+            v_filters.append(f"tpad=start_duration={d_from}:color=black@0")
+        filter_chain = ",".join(v_filters)
+        filters.append(f"[{input_idx}:v]{filter_chain}[{v_label}]")
+        filters.append(
+            f"[{current_label}][{v_label}]overlay={ox}:{oy}:eof_action=pass:format=auto[{next_label}]"
+        )
+
+    # Audio (input already seeked via -ss/-t, so no atrim needed)
     a_label = None
     if volume > 0 and _input_has_audio(local_path):
         a_label = f"a{input_idx}"
         a_filters = []
-        a_filters.append(f"atrim={t_from}:{t_to},asetpts=PTS-STARTPTS")
+        a_filters.append("asetpts=PTS-STARTPTS")
         if playback_rate != 1:
-            # atempo only supports 0.5-100.0
             rate = max(0.5, min(100.0, playback_rate))
             a_filters.append(f"atempo={rate}")
         a_filters.append(f"volume={volume}")
-        # Delay audio to match display start
         if d_from > 0:
             delay_ms = int(d_from * 1000)
             a_filters.append(f"adelay={delay_ms}|{delay_ms}")
@@ -571,7 +854,8 @@ def _process_single_video(
 
 def _process_video_group_with_transitions(
     items, transitions, asset_map, inputs, filters,
-    input_idx, current_label, canvas_w, canvas_h, fps
+    input_idx, current_label, canvas_w, canvas_h, fps,
+    alpha_start=None,
 ):
     """Process multiple video items connected by transitions using xfade."""
     if not items:
@@ -583,20 +867,21 @@ def _process_video_group_with_transitions(
     # First, prepare each video as a separate stream
     for item in items:
         details = item.get("details", {})
-        src = details.get("src", "")
-        local_path = asset_map.get(src)
+        local_path = _get_local_path(item, asset_map, prefer_original=True)
         if not local_path:
             continue
 
         display = item.get("display", {})
+        role = _get_promo_role(item)
         d_from = display.get("from", 0) / 1000.0
         d_to = display.get("to", 0) / 1000.0
+        d_from = _clamp_alpha_start(d_from, alpha_start, role)
         dur = d_to - d_from
 
         t_from, t_to = _resolve_source_trim(item, local_path, d_from, d_to)
 
         playback_rate = item.get("playbackRate", 1) or 1
-        volume = (details.get("volume", 100) or 0) / 100.0
+        volume = (details.get("volume", 100) or 100) / 100.0
         scale = _parse_scale_from_transform(details.get("transform", "none"))
 
         left = parse_css_px(details.get("left", 0))
@@ -605,11 +890,16 @@ def _process_video_group_with_transitions(
         h = parse_css_length(details.get("height"), float(canvas_h), float(canvas_h))
         _, _, sw, sh = _calculate_overlay_pos(left, top_val, w, h, scale)
 
-        inputs.append(["-i", local_path])
+        trim_dur = t_to - t_from
+        input_args = []
+        if t_from > 0.01:
+            input_args.extend(["-ss", str(t_from)])
+        input_args.extend(["-t", str(trim_dur), "-i", local_path])
+        inputs.append(input_args)
         v_label = f"xv{input_idx}"
 
         v_filters = [
-            f"trim={t_from}:{t_to},setpts=PTS-STARTPTS",
+            "setpts=PTS-STARTPTS",
             f"scale={sw}:{sh}",
             "format=rgba",
         ]
@@ -619,10 +909,10 @@ def _process_video_group_with_transitions(
         filters.append(f"[{input_idx}:v]{','.join(v_filters)}[{v_label}]")
         video_labels.append((v_label, dur, item))
 
-        # Audio
+        # Audio (input already seeked via -ss/-t)
         if volume > 0 and _input_has_audio(local_path):
             a_label = f"xa{input_idx}"
-            a_filters = [f"atrim={t_from}:{t_to},asetpts=PTS-STARTPTS"]
+            a_filters = ["asetpts=PTS-STARTPTS"]
             if playback_rate != 1:
                 a_filters.append(f"atempo={max(0.5, min(100.0, playback_rate))}")
             a_filters.append(f"volume={volume}")
@@ -661,7 +951,7 @@ def _process_video_group_with_transitions(
         result_label = out_label
         offset_acc += next_dur - t_dur
 
-    # Overlay the xfaded result onto the current canvas (time-bounded like single clips)
+    # Overlay the xfaded result onto the current canvas
     first_item = items[0]
     last_item = items[-1]
     d_from = first_item.get("display", {}).get("from", 0) / 1000.0
@@ -674,10 +964,16 @@ def _process_video_group_with_transitions(
     s = _parse_scale_from_transform(details.get("transform", "none"))
     ox, oy, _, _ = _calculate_overlay_pos(left, top_val, w, h, s)
 
+    if d_from > 0.001:
+        tpad_lbl = f"tpg{input_idx}"
+        filters.append(
+            f"[{result_label}]format=rgba,tpad=start_duration={d_from}:color=black@0[{tpad_lbl}]"
+        )
+        result_label = tpad_lbl
+
     final_label = f"ovg{input_idx}"
-    enable = f"enable='between(t,{d_from},{d_to})'"
     filters.append(
-        f"[{current_label}][{result_label}]overlay={ox}:{oy}:{enable}:format=auto[{final_label}]"
+        f"[{current_label}][{result_label}]overlay={ox}:{oy}:eof_action=pass:format=auto[{final_label}]"
     )
 
     return {
@@ -687,15 +983,16 @@ def _process_video_group_with_transitions(
     }
 
 
-def _process_audio(item, asset_map, inputs, filters, input_idx, fps):
+def _process_audio(item, asset_map, inputs, filters, input_idx, fps, alpha_start=None, total_duration=None):
     details = item.get("details", {})
-    src = details.get("src", "")
-    local_path = asset_map.get(src)
+    role = _get_promo_role(item)
+    local_path = _get_local_path(item, asset_map, prefer_original=True)
     if not local_path:
         return None
 
     display = item.get("display", {})
     d_from = display.get("from", 0) / 1000.0
+    d_from = _clamp_alpha_start(d_from, alpha_start, role)
 
     trim = item.get("trim", {})
     t_from = trim.get("from", 0) / 1000.0 if trim else 0
@@ -704,10 +1001,28 @@ def _process_audio(item, asset_map, inputs, filters, input_idx, fps):
     playback_rate = item.get("playbackRate", 1) or 1
     volume = (details.get("volume", 100) or 100) / 100.0
 
-    inputs.append(["-i", local_path])
+    is_bgm = role == "backgroundMusic" and total_duration
+
+    input_args = []
+    if is_bgm:
+        input_args.extend(["-stream_loop", "-1"])
+    if t_from > 0.01 and not is_bgm:
+        input_args.extend(["-ss", str(t_from)])
+    if not is_bgm and t_to < 99000:
+        trim_dur = t_to - t_from
+        input_args.extend(["-t", str(trim_dur)])
+    input_args.extend(["-i", local_path])
+    inputs.append(input_args)
+
     a_label = f"au{input_idx}"
 
-    a_filters = [f"atrim={t_from}:{t_to},asetpts=PTS-STARTPTS"]
+    a_filters = ["asetpts=PTS-STARTPTS"]
+    if is_bgm:
+        if t_from > 0.01:
+            a_filters.append(f"atrim={t_from}")
+            a_filters.append("asetpts=PTS-STARTPTS")
+        a_filters.append(f"atrim=0:{total_duration}")
+        a_filters.append("asetpts=PTS-STARTPTS")
     if playback_rate != 1:
         a_filters.append(f"atempo={max(0.5, min(100.0, playback_rate))}")
     a_filters.append(f"volume={volume}")
@@ -725,23 +1040,25 @@ def _process_audio(item, asset_map, inputs, filters, input_idx, fps):
 
 def _process_image(
     item, asset_map, inputs, filters, input_idx,
-    current_label, canvas_w, canvas_h, fps
+    current_label, canvas_w, canvas_h, fps,
+    alpha_start=None,
 ):
     details = item.get("details", {})
-    src = details.get("src", "")
-    local_path = asset_map.get(src)
+    local_path = _get_local_path(item, asset_map, prefer_original=True)
     if not local_path:
         return None
 
     display = item.get("display", {})
+    role = _get_promo_role(item)
     d_from = display.get("from", 0) / 1000.0
     d_to = display.get("to", 0) / 1000.0
+    d_from = _clamp_alpha_start(d_from, alpha_start, role)
 
     scale = _parse_scale_from_transform(details.get("transform", "none"))
     left = parse_css_px(details.get("left", 0))
     top_val = parse_css_px(details.get("top", 0))
-    w = parse_css_length(details.get("width"), float(canvas_w), 100.0)
-    h = parse_css_length(details.get("height"), float(canvas_h), 100.0)
+    w = parse_css_length(details.get("width"), float(canvas_w), float(canvas_w))
+    h = parse_css_length(details.get("height"), float(canvas_h), float(canvas_h))
     ox, oy, sw, sh = _calculate_overlay_pos(left, top_val, w, h, scale)
 
     opacity = (details.get("opacity", 100) or 100) / 100.0
@@ -783,7 +1100,8 @@ def _process_image(
 
 def _process_text(
     item, asset_map, overlays_dir, inputs, filters,
-    input_idx, current_label, canvas_w, canvas_h, fps
+    input_idx, current_label, canvas_w, canvas_h, fps,
+    alpha_start=None,
 ):
     details = item.get("details", {})
     font_url = details.get("fontUrl")
@@ -792,8 +1110,10 @@ def _process_text(
         print(f"[WARN] Font not resolved for text item {item.get('id')}: {font_url}")
 
     display = item.get("display", {})
+    role = _get_promo_role(item)
     d_from = display.get("from", 0) / 1000.0
     d_to = display.get("to", 0) / 1000.0
+    d_from = _clamp_alpha_start(d_from, alpha_start, role)
 
     layer_img, box_w, box_h = render_text_layer(
         details, (canvas_w, canvas_h), font_path

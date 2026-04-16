@@ -1,5 +1,4 @@
 import Draggable from "@/components/shared/draggable";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { dispatch } from "@designcombo/events";
 import { ADD_VIDEO } from "@designcombo/state";
 import { generateId } from "@designcombo/timeline";
@@ -31,7 +30,7 @@ export const Videos = () => {
         }
       },
       options: {
-        resourceId: "main",
+        targetTrackId: "video",
         scaleMode: "fit"
       }
     });
@@ -63,7 +62,7 @@ export const Videos = () => {
   );
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
       <ModalUpload type="video" />
       <UploadPrompt />
 
@@ -94,8 +93,7 @@ export const Videos = () => {
         )}
       </div>
 
-      <ScrollArea className="flex-1 px-4 max-h-full">
-        <div className="max-h-full">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4">
           {displayVideos.length === 0 && !searchQuery ? (
              <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
               <VideoIcon size={32} className="opacity-50" />
@@ -124,8 +122,7 @@ export const Videos = () => {
               })}
             </div>
           )}
-        </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 };

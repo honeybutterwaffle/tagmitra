@@ -26,7 +26,7 @@ const DownloadProgressModal = () => {
         <DialogDescription className="hidden" />
         <XIcon
           onClick={() => actions.setDisplayProgressModal(false)}
-          className="absolute right-4 top-5 h-5 w-5 text-zinc-400 hover:cursor-pointer hover:text-zinc-500"
+          className="absolute right-4 top-5 h-5 w-5 text-muted-foreground hover:cursor-pointer hover:text-foreground"
         />
         <div className="flex h-16 items-center border-b px-4 font-medium">
           Download

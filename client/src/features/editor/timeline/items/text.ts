@@ -43,8 +43,24 @@ class Text extends Resizable {
     ctx.font = `400 12px ${SECONDARY_FONT}`;
     ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
     ctx.textAlign = "left";
+
+    const iconSpace = 36;
+    const rightPadding = 5;
+    const availableWidth = this.width - iconSpace - rightPadding;
+
+    let displayText = this.text;
+    if (ctx.measureText(displayText).width > availableWidth) {
+      while (
+        ctx.measureText(`${displayText}...`).width > availableWidth &&
+        displayText.length > 0
+      ) {
+        displayText = displayText.slice(0, -1);
+      }
+      displayText = displayText.length > 0 ? `${displayText}...` : "";
+    }
+
     ctx.clip();
-    ctx.fillText(this.text, 36, 12);
+    ctx.fillText(displayText, iconSpace, 12);
 
     ctx.translate(8, 1);
 

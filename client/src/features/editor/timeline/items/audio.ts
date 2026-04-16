@@ -12,6 +12,10 @@ import {
 import { IMetadata, ITrim } from "@designcombo/types";
 import { createAudioControls } from "../controls";
 import { SECONDARY_FONT } from "../../constants/constants";
+import {
+  drawItemNameLabel,
+  extractFilenameFromSrc
+} from "./draw-name-label";
 
 const MAX_CANVAS_WIDTH = 12000; // Keep canvas size reasonable
 const CANVAS_SAFE_DRAWING = 2000;
@@ -21,8 +25,10 @@ interface AudioProps extends TrimmableProps {
   trim: ITrim;
   duration: number;
   src: string;
+  name?: string;
   metadata: Partial<IMetadata> & {
     previewUrl: string;
+    name?: string;
   };
 }
 
@@ -30,6 +36,7 @@ class Audio extends Trimmable {
   static type = "Audio";
   public barData?: AudioData;
   public hasSrc = true;
+  public name = "";
   private offscreenCanvas: OffscreenCanvas | null = null;
   private offscreenCtx: OffscreenCanvasRenderingContext2D | null = null;
 
@@ -51,6 +58,10 @@ class Audio extends Trimmable {
     this.duration = props.duration;
     this.fill = "#2D1625";
     this.src = props.src;
+    this.name =
+      props.name ||
+      props.metadata?.name ||
+      extractFilenameFromSrc(props.src);
     this.objectCaching = false;
     this.initOffscreenCanvas();
     this.initialize();
@@ -59,7 +70,7 @@ class Audio extends Trimmable {
   // Update the _render method to handle the visible portion
   public _render(ctx: CanvasRenderingContext2D) {
     super._render(ctx);
-    this.drawTextIdentity(ctx);
+    drawItemNameLabel(ctx, this.width, this.height, this.name);
     this.updateSelected(ctx);
 
     ctx.save();

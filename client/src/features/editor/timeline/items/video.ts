@@ -16,6 +16,10 @@ import {
 import { getFileFromUrl } from "../../utils/file";
 import { createMediaControls } from "../controls";
 import { SECONDARY_FONT } from "../../constants/constants";
+import {
+  drawItemNameLabel,
+  extractFilenameFromSrc
+} from "./draw-name-label";
 
 // Type declaration for MP4Clip to avoid SSR issues
 type MP4ClipType = any;
@@ -32,8 +36,10 @@ interface VideoProps extends TrimmableProps {
   trim: ITrim;
   duration: number;
   src: string;
+  name?: string;
   metadata: Partial<IMetadata> & {
     previewUrl: string;
+    name?: string;
   };
 }
 class Video extends Trimmable {
@@ -50,6 +56,7 @@ class Video extends Trimmable {
   declare duration: number;
   public prevDuration: number;
   public itemType = "video";
+  public name = "";
   public metadata?: Partial<IMetadata>;
   declare src: string;
 
@@ -97,6 +104,10 @@ class Video extends Trimmable {
     this.fill = "#27272a";
     this.borderOpacityWhenMoving = 1;
     this.metadata = props.metadata;
+    this.name =
+      props.name ||
+      props.metadata?.name ||
+      extractFilenameFromSrc(props.src);
 
     this.aspectRatio = props.aspectRatio;
 
@@ -378,7 +389,7 @@ class Video extends Trimmable {
     ctx.drawImage(this.offscreenCanvas, 0, 0);
 
     ctx.restore();
-    // this.drawTextIdentity(ctx);
+    drawItemNameLabel(ctx, this.width, this.height, this.name);
     this.updateSelected(ctx);
   }
 

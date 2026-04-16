@@ -2,8 +2,8 @@ import { ILayoutState } from "../interfaces/layout";
 import { create } from "zustand";
 
 const useLayoutStore = create<ILayoutState>((set) => ({
-  activeMenuItem: "texts",
-  showMenuItem: false,
+  activeMenuItem: "package",
+  showMenuItem: true,
   cropTarget: null,
   showControlItem: false,
   showToolboxItem: false,

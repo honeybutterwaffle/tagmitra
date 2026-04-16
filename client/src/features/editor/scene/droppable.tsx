@@ -30,13 +30,22 @@ const useDragAndDrop = (onDragStateChange?: (isDragging: boolean) => void) => {
     const payload = { ...draggedData, id: generateId() };
     switch (draggedData.type) {
       case AcceptedDropTypes.IMAGE:
-        dispatch(ADD_IMAGE, { payload });
+        dispatch(ADD_IMAGE, {
+          payload,
+          options: { targetTrackId: "overlay" }
+        });
         break;
       case AcceptedDropTypes.VIDEO:
-        dispatch(ADD_VIDEO, { payload });
+        dispatch(ADD_VIDEO, {
+          payload,
+          options: { targetTrackId: "video", scaleMode: "fit" }
+        });
         break;
       case AcceptedDropTypes.AUDIO:
-        dispatch(ADD_AUDIO, { payload });
+        dispatch(ADD_AUDIO, {
+          payload,
+          options: { targetTrackId: "audio" }
+        });
         break;
     }
   }, []);

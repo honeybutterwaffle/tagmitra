@@ -26,7 +26,7 @@ export async function processFileUpload(
     const formData = new FormData();
     formData.append("file", file);
 
-    const { data } = await axios.post("/api/uploads/presign", formData, {
+    const { data } = await axios.post("/api/uploads/file", formData, {
       headers: { "Content-Type": "multipart/form-data" },
       onUploadProgress: (progressEvent) => {
         const percent = Math.round(
@@ -45,17 +45,27 @@ export async function processFileUpload(
 
     // Construct upload data from uploadInfo
     const uploadData = {
+      id: uploadId,
       fileName: uploadInfo.fileName,
       filePath: uploadInfo.filePath,
       fileSize: file.size,
       contentType: uploadInfo.contentType,
-      metadata: { uploadedUrl: uploadInfo.url },
+      metadata: {
+        uploadedUrl: uploadInfo.url,
+        proxyUrl: uploadInfo.proxyUrl || uploadInfo.url,
+        originalUrl: uploadInfo.originalUrl || uploadInfo.url,
+        alphaProxyUrl: uploadInfo.alphaProxyUrl || null,
+        duration_sec: uploadInfo.duration_sec,
+        width: uploadInfo.width,
+        height: uploadInfo.height,
+        aspect: uploadInfo.aspect
+      },
       folder: uploadInfo.folder || null,
       type: uploadInfo.contentType.split("/")[0],
       method: "direct",
       origin: "user",
       status: "uploaded",
-      isPreview: false
+      isPreview: uploadInfo.url !== uploadInfo.originalUrl
     };
 
     callbacks.onStatus(uploadId, "uploaded");
@@ -96,6 +106,7 @@ export async function processUrlUpload(
     const contentType = typeMap[ext] || "application/octet-stream";
 
     const uploadData = {
+      id: uploadId,
       fileName: url.split("/").pop() || "file",
       filePath: url,
       fileSize: 0,

@@ -8,47 +8,89 @@ import {
 } from "./ui/dialog";
 import { FileIcon, UploadIcon, X } from "lucide-react";
 import { Button } from "./ui/button";
-import { ScrollArea } from "./ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import useUploadStore from "@/features/editor/store/use-upload-store";
 import axios from "axios";
-import { Input } from "./ui/input";
 type ModalUploadProps = {
   type?: string;
+  role?: string | null;
 };
 
 export const extractVideoThumbnail = (file: File) => {
   return new Promise<string>((resolve) => {
+    const url = URL.createObjectURL(file);
     const video = document.createElement("video");
-    video.src = URL.createObjectURL(file);
-    video.currentTime = 1;
     video.muted = true;
     video.playsInline = true;
-    video.onloadeddata = () => {
+    video.preload = "auto";
+
+    const cleanup = () => URL.revokeObjectURL(url);
+    const timeout = setTimeout(() => {
+      cleanup();
+      resolve("");
+    }, 5000);
+
+    video.onloadedmetadata = () => {
+      if (!video.videoWidth || !video.videoHeight) {
+        clearTimeout(timeout);
+        cleanup();
+        resolve("");
+        return;
+      }
+      video.currentTime = Math.min(1, video.duration / 2);
+    };
+    video.onseeked = () => {
+      clearTimeout(timeout);
       const canvas = document.createElement("canvas");
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const ctx = canvas.getContext("2d");
-      ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL("image/png"));
+      if (!ctx) { cleanup(); resolve(""); return; }
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let hasContent = false;
+      for (let i = 3; i < pixels.length; i += 16) {
+        if (pixels[i] > 0) { hasContent = true; break; }
+      }
+
+      cleanup();
+      resolve(hasContent ? canvas.toDataURL("image/png") : "");
     };
-    video.onerror = () => resolve("");
+    video.onerror = () => {
+      clearTimeout(timeout);
+      cleanup();
+      resolve("");
+    };
+    video.src = url;
   });
 };
-const ModalUpload: React.FC<ModalUploadProps> = ({ type = "all" }) => {
+
+const inferTypeFromExtension = (name: string): string => {
+  const ext = name.split(".").pop()?.toLowerCase() || "";
+  const videoExts = ["mp4", "mov", "mxf", "avi", "wmv", "flv", "webm", "mkv", "m4v", "ts", "m2ts"];
+  const audioExts = ["mp3", "wav", "aac", "flac", "ogg", "wma", "m4a"];
+  const imageExts = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "tiff"];
+  if (videoExts.includes(ext)) return `video/${ext}`;
+  if (audioExts.includes(ext)) return `audio/${ext}`;
+  if (imageExts.includes(ext)) return `image/${ext}`;
+  return "application/octet-stream";
+};
+
+const ModalUpload: React.FC<ModalUploadProps> = ({ type = "all", role = null }) => {
   const {
     setShowUploadModal,
     showUploadModal,
     setFiles,
     files,
     addPendingUploads,
-    processUploads
+    processUploads,
+    setUploadRole
   } = useUploadStore();
   const [videoThumbnails, setVideoThumbnails] = useState<{
     [name: string]: string;
   }>({});
-  const [videoUrl, setVideoUrl] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -163,54 +205,42 @@ const ModalUpload: React.FC<ModalUploadProps> = ({ type = "all" }) => {
   const handleUpload = async () => {
     // Prepare UploadFile objects for files
     const fileUploads = files
-      .filter((f) => f.file?.type)
+      .filter((f) => f.file)
       .map((f) => ({
         id: f.id,
         file: f.file,
-        type: f.file?.type,
+        type: f.file?.type || inferTypeFromExtension(f.file?.name || ""),
         status: "pending" as const,
         progress: 0
       }));
 
-    // Prepare UploadFile object for URL if present
-    const urlUploads = videoUrl.trim()
-      ? [
-          {
-            id: crypto.randomUUID(),
-            url: videoUrl.trim(),
-            type: "url",
-            status: "pending" as const,
-            progress: 0
-          }
-        ]
-      : [];
-
-    // Add to pending uploads
-    addPendingUploads([...fileUploads, ...urlUploads]);
+    addPendingUploads(fileUploads);
 
     setTimeout(() => {
       processUploads();
-      // Clear modal state and close
       setFiles([]);
       setShowUploadModal(false);
-      setVideoUrl("");
     }, 0);
   };
   const getAcceptType = () => {
+    const videoExtras = ",.mov,.mxf,.avi,.wmv,.flv,.webm,.mkv,.m4v,.ts,.m2ts";
+    const audioExtras = ",.wav,.aac,.flac,.ogg,.wma,.m4a";
     switch (type) {
       case "audio":
-        return "audio/*";
+        return "audio/*" + audioExtras;
       case "image":
         return "image/*";
       case "video":
-        return "video/*";
+        return "video/*" + videoExtras;
       default:
-        return "audio/*,image/*,video/*";
+        return "audio/*,image/*,video/*" + videoExtras + audioExtras;
     }
   };
   useEffect(() => {
     setFiles([]);
-  }, [showUploadModal]);
+    setUploadRole(role);
+    return () => setUploadRole(null);
+  }, [showUploadModal, setFiles, setUploadRole, role]);
 
   return (
     <div>
@@ -255,7 +285,7 @@ const ModalUpload: React.FC<ModalUploadProps> = ({ type = "all" }) => {
                 <span className="text-xs text-muted-foreground">
                   Selected files:
                 </span>
-                <ScrollArea className="max-h-48">
+                <div className="max-h-48 overflow-y-auto pr-1">
                   <AnimatePresence initial={false}>
                     <div className="flex flex-col gap-2">
                       {files.map((file) => (
@@ -329,16 +359,10 @@ const ModalUpload: React.FC<ModalUploadProps> = ({ type = "all" }) => {
                       ))}
                     </div>
                   </AnimatePresence>
-                </ScrollArea>
+                </div>
               </div>
             )}
 
-            <Input
-              type="text"
-              placeholder="Paste media link https://..."
-              value={videoUrl}
-              onChange={(e) => setVideoUrl(e.target.value)}
-            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowUploadModal(false)}>
@@ -346,7 +370,7 @@ const ModalUpload: React.FC<ModalUploadProps> = ({ type = "all" }) => {
             </Button>
             <Button
               onClick={handleUpload}
-              disabled={(files.length === 0 && !videoUrl) || isUploading}
+              disabled={files.length === 0 || isUploading}
             >
               Upload
             </Button>

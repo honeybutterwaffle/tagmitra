@@ -23,31 +23,12 @@ interface MenuItemData {
 
 // Menu items configuration
 const menuItems: MenuItemData[] = [
-  {
-    id: "texts",
-    label: "Text",
-    icon: Icons.type
-  },
-  {
-    id: "videos",
-    label: "Video",
-    icon: Icons.video
-  },
-  {
-    id: "images",
-    label: "Images",
-    icon: Icons.image
-  },
-  {
-    id: "audios",
-    label: "Audio",
-    icon: Icons.audio
-  },
-  {
-    id: "transitions",
-    label: "Transitions",
-    icon: Icons.transition
-  }
+  { id: "package", label: "Package", icon: Icons.video },
+  { id: "backgroundMusic", label: "Background Music", icon: Icons.audio },
+  { id: "assets", label: "Assets", icon: Icons.video },
+  { id: "overlay", label: "Overlay", icon: Icons.image },
+  { id: "texts", label: "Text", icon: Icons.type },
+  { id: "transitions", label: "Transitions", icon: Icons.transition }
 ];
 
 // Reusable MenuButton component

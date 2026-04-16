@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { processUpload, type UploadCallbacks } from "@/utils/upload-service";
+import {
+  applyBackgroundMusicUploadToTimeline,
+  applyPackageUploadToTimeline
+} from "../utils/promo-timeline-apply";
 
 interface UploadFile {
   id: string;
@@ -15,6 +19,8 @@ interface UploadFile {
 interface IUploadStore {
   showUploadModal: boolean;
   setShowUploadModal: (showUploadModal: boolean) => void;
+  uploadRole: string | null;
+  setUploadRole: (role: string | null) => void;
   uploadProgress: Record<string, number>;
   setUploadProgress: (uploadProgress: Record<string, number>) => void;
   uploadsVideos: any[];
@@ -42,6 +48,7 @@ interface IUploadStore {
   removeUpload: (id: string) => void;
   uploads: any[];
   setUploads: (uploads: any[] | ((prev: any[]) => any[])) => void;
+  removeUploadAsset: (key: string) => void;
 }
 
 const useUploadStore = create<IUploadStore>()(
@@ -50,6 +57,8 @@ const useUploadStore = create<IUploadStore>()(
       showUploadModal: false,
       setShowUploadModal: (showUploadModal: boolean) =>
         set({ showUploadModal }),
+      uploadRole: null,
+      setUploadRole: (uploadRole: string | null) => set({ uploadRole }),
 
       uploadProgress: {},
       setUploadProgress: (uploadProgress: Record<string, number>) =>
@@ -91,7 +100,8 @@ const useUploadStore = create<IUploadStore>()(
           updateUploadProgress,
           setUploadStatus,
           removeUpload,
-          setUploads
+          setUploads,
+          uploadRole
         } = get();
 
         // Move pending uploads to active with 'uploading' status
@@ -141,12 +151,50 @@ const useUploadStore = create<IUploadStore>()(
             .then((uploadData) => {
               // Add the complete upload data to the uploads array
               if (uploadData) {
+                const tagRole = uploadRole ?? null;
+                const tag = (u: any) => ({
+                  ...u,
+                  metadata: { ...(u.metadata || {}), promoRole: tagRole }
+                });
+                const singleRoleReplace =
+                  tagRole === "package" || tagRole === "backgroundMusic";
+
+                const applyTimelineIfPromo = (record: any) => {
+                  if (tagRole === "package") {
+                    void applyPackageUploadToTimeline(record);
+                  } else if (tagRole === "backgroundMusic") {
+                    applyBackgroundMusicUploadToTimeline(record);
+                  }
+                };
+
                 if (Array.isArray(uploadData)) {
-                  // URL uploads return an array
-                  setUploads((prev) => [...prev, ...uploadData]);
+                  const tagged = uploadData.map(tag);
+                  setUploads((prev) => {
+                    if (!singleRoleReplace) return [...prev, ...tagged];
+                    return [
+                      ...prev.filter(
+                        (u) => (u.metadata?.promoRole ?? null) !== tagRole
+                      ),
+                      ...tagged
+                    ];
+                  });
+                  if (singleRoleReplace && tagged.length > 0) {
+                    applyTimelineIfPromo(tagged[tagged.length - 1]);
+                  }
                 } else {
-                  // File uploads return a single object
-                  setUploads((prev) => [...prev, uploadData]);
+                  const one = tag(uploadData);
+                  setUploads((prev) => {
+                    if (!singleRoleReplace) return [...prev, one];
+                    return [
+                      ...prev.filter(
+                        (u) => (u.metadata?.promoRole ?? null) !== tagRole
+                      ),
+                      one
+                    ];
+                  });
+                  if (singleRoleReplace) {
+                    applyTimelineIfPromo(one);
+                  }
                 }
               }
             })
@@ -182,6 +230,18 @@ const useUploadStore = create<IUploadStore>()(
             typeof uploads === "function"
               ? (uploads as (prev: any[]) => any[])(state.uploads)
               : uploads
+        })),
+      removeUploadAsset: (key: string) =>
+        set((state) => ({
+          uploads: state.uploads.filter(
+            (u) =>
+              u.id !== key &&
+              u.filePath !== key &&
+              u.metadata?.uploadedUrl !== key &&
+              u.metadata?.proxyUrl !== key &&
+              u.metadata?.originalUrl !== key &&
+              u.url !== key
+          )
         }))
     }),
     {

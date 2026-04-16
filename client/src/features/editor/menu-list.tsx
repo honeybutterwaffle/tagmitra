@@ -20,28 +20,34 @@ import {
 // Define menu items configuration for better maintainability
 const MENU_ITEMS = [
   {
+    id: "package",
+    icon: Icons.video,
+    label: "Package",
+    ariaLabel: "Base package video"
+  },
+  {
+    id: "backgroundMusic",
+    icon: Icons.audio,
+    label: "Background Music",
+    ariaLabel: "Looping background music"
+  },
+  {
+    id: "assets",
+    icon: Icons.video,
+    label: "Assets",
+    ariaLabel: "Upload and manage video and audio assets"
+  },
+  {
+    id: "overlay",
+    icon: Icons.image,
+    label: "Overlay",
+    ariaLabel: "Image overlays"
+  },
+  {
     id: "texts",
     icon: Icons.type,
-    label: "Texts",
+    label: "Text",
     ariaLabel: "Add and edit text elements"
-  },
-  {
-    id: "videos",
-    icon: Icons.video,
-    label: "Videos",
-    ariaLabel: "Add and manage video content"
-  },
-  {
-    id: "images",
-    icon: Icons.image,
-    label: "Images",
-    ariaLabel: "Add and manage images"
-  },
-  {
-    id: "audios",
-    icon: Icons.audio,
-    label: "Audio",
-    ariaLabel: "Add and manage audio content"
   },
   {
     id: "transitions",
@@ -69,8 +75,8 @@ const MenuButton = memo<{
       className={cn(
         "flex items-center justify-center flex-none h-7.5 w-7.5 cursor-pointer rounded-sm transition-all duration-200",
         isActive
-          ? "bg-white/10 text-white"
-          : "text-muted-foreground hover:bg-white/5 hover:text-white"
+          ? "bg-accent text-accent-foreground"
+          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
       )}
       key={item.id}
     >

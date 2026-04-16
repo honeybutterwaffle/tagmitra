@@ -11,7 +11,7 @@ const Transform = () => {
     <div className="flex flex-col gap-2">
       <div>Transform</div>
       <div className="flex flex-col gap-2">
-        <div className="text-sm text-zinc-400">Scale</div>
+        <div className="text-sm text-muted-foreground">Scale</div>
         <div
           style={{
             display: "grid",
@@ -31,7 +31,7 @@ const Transform = () => {
             <Button
               size="icon"
               variant="ghost"
-              className="h-6 w-6 text-zinc-400"
+              className="h-6 w-6 text-muted-foreground"
             >
               <RotateCw size={14} />
             </Button>
@@ -40,7 +40,7 @@ const Transform = () => {
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="text-sm text-zinc-400">Position</div>
+        <div className="text-sm text-muted-foreground">Position</div>
         <div
           style={{
             display: "grid",
@@ -50,13 +50,13 @@ const Transform = () => {
         >
           <div className="relative">
             <Input className="px-2 text-sm" defaultValue={100} />
-            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 transform text-zinc-200">
+            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 transform text-foreground">
               x
             </div>
           </div>
           <div className="relative">
             <Input className="px-2 text-sm" defaultValue={100} />
-            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 transform text-zinc-200">
+            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 transform text-foreground">
               y
             </div>
           </div>
@@ -65,7 +65,7 @@ const Transform = () => {
             <Button
               size="icon"
               variant="ghost"
-              className="h-6 w-6 text-zinc-400"
+              className="h-6 w-6 text-muted-foreground"
             >
               <RotateCw size={14} />
             </Button>
@@ -74,7 +74,7 @@ const Transform = () => {
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="text-sm text-zinc-400">Rotate</div>
+        <div className="text-sm text-muted-foreground">Rotate</div>
         <div
           style={{
             display: "grid",
@@ -88,7 +88,7 @@ const Transform = () => {
             <Button
               size="icon"
               variant="ghost"
-              className="h-6 w-6 text-zinc-400"
+              className="h-6 w-6 text-muted-foreground"
             >
               <RotateCw size={14} />
             </Button>

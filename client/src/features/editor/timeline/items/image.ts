@@ -6,15 +6,22 @@ import {
   Control
 } from "@designcombo/timeline";
 import { createResizeControls } from "../controls";
+import {
+  drawItemNameLabel,
+  extractFilenameFromSrc
+} from "./draw-name-label";
 
 interface ImageProps extends ResizableProps {
   src: string;
+  name?: string;
+  metadata?: { name?: string };
 }
 
 class Image extends Resizable {
   static type = "Image";
   public src: string;
   public hasSrc = true;
+  public name = "";
 
   static createControls(): { controls: Record<string, Control> } {
     return { controls: createResizeControls() };
@@ -24,6 +31,10 @@ class Image extends Resizable {
     super(props);
     this.id = props.id;
     this.src = props.src;
+    this.name =
+      props.name ||
+      props.metadata?.name ||
+      extractFilenameFromSrc(props.src);
     this.display = props.display;
     this.tScale = props.tScale;
     this.loadImage();
@@ -31,6 +42,7 @@ class Image extends Resizable {
 
   public _render(ctx: CanvasRenderingContext2D) {
     super._render(ctx);
+    drawItemNameLabel(ctx, this.width, this.height, this.name);
     this.updateSelected(ctx);
   }
 
